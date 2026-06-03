@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import HighlightedText from '@/components/HighlightedText'
 import ClaimCard from '@/components/ClaimCard'
 import ClaimSidebar from '@/components/ClaimSidebar'
-import { Loader2, Search, Sparkles } from 'lucide-react'
+import { Loader2, Search, Sparkles, Database } from 'lucide-react'
 
 const DEMO_INPUTS = [
   {
@@ -48,6 +48,16 @@ export default function FactCheckInput() {
   const [error, setError] = useState('')
   const abortControllerRef = useRef<AbortController | null>(null)
   const claimsAccumulatorRef = useRef<ClaimResult[]>([])
+
+  // Compute KB stats from claims
+  const cacheHits = claims.filter((c) => c.is_cached).length
+  const liveSearches = claims.filter((c) => !c.is_cached).length
+  const avgSimilarity =
+    cacheHits > 0
+      ? claims
+          .filter((c) => c.is_cached && c.similarity_score != null)
+          .reduce((sum, c) => sum + (c.similarity_score || 0), 0) / cacheHits
+      : 0
 
   const handleSubmit = async () => {
     if (!text.trim() || loading) return
@@ -222,6 +232,37 @@ export default function FactCheckInput() {
       {error && (
         <Card className="bg-red-900/20 border-red-800/50 p-4">
           <p className="text-sm text-red-400">{error}</p>
+        </Card>
+      )}
+
+      {/* Knowledge Base Stats */}
+      {claims.length > 0 && !loading && (
+        <Card className="bg-[#111111] border-[#1f1f1f] p-5 rounded-xl">
+          <div className="flex items-center gap-2 mb-3">
+            <Database className="w-4 h-4 text-[#6366f1]" />
+            <h3 className="text-sm font-medium text-[#737373] uppercase tracking-wider">
+              Knowledge Base
+            </h3>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-3 rounded-lg bg-[#1a1a1a]">
+              <p className="text-2xl font-bold text-[#f5f5f5]">{cacheHits}</p>
+              <p className="text-xs text-[#737373] mt-1">⚡ Cache Hits</p>
+              {cacheHits > 0 && (
+                <p className="text-xs text-[#6366f1] mt-0.5">
+                  {(avgSimilarity * 100).toFixed(1)}% avg match
+                </p>
+              )}
+            </div>
+            <div className="text-center p-3 rounded-lg bg-[#1a1a1a]">
+              <p className="text-2xl font-bold text-[#f5f5f5]">{liveSearches}</p>
+              <p className="text-xs text-[#737373] mt-1">🔍 Live Searches</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-[#1a1a1a]">
+              <p className="text-2xl font-bold text-[#f5f5f5]">{claims.length}</p>
+              <p className="text-xs text-[#737373] mt-1">📊 Total Claims</p>
+            </div>
+          </div>
         </Card>
       )}
 
