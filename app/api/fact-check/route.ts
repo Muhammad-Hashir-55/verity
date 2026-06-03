@@ -7,57 +7,89 @@ async function verifyClaimWithGroq(
   claim: string,
   searchResults: { answer: string; results: any[] }
 ) {
+  // Log what Tavily actually returned for debugging
+  console.log(`[Tavily] Claim: "${claim}"`)
+  console.log(`[Tavily] Answer: ${searchResults.answer?.slice(0, 200) || 'NONE'}`)
+  console.log(`[Tavily] Sources: ${searchResults.results?.length || 0}`)
+
+  if (!searchResults.results || searchResults.results.length === 0) {
+    console.log(`[Tavily] No search results found for claim, returning unverifiable`)
+    return {
+      verdict: 'unverifiable',
+      reasoning:
+        'No web search results were found for this claim. It cannot be verified or refuted.',
+      sources: [],
+    }
+  }
+
   try {
     const completion = await groq.chat.completions.create({
       model: GROQ_MODEL,
       messages: [
         {
           role: 'system',
-          content: `You are a rigorous fact-checker. You will be given a claim and web search results. Analyze the evidence and return a structured verdict.
+          content: `CRITICAL INSTRUCTIONS — FOLLOW EXACTLY:
 
-Return ONLY valid JSON in this exact format (no markdown):
+You are a fact-checker. You are given a claim and web search results from a live search.
+
+STRICT RULES:
+1. You MUST base your verdict ONLY on the web search results provided below. 
+2. You MUST NOT use any of your own training knowledge, pre-existing knowledge, or assumptions.
+3. If the search results do not contain enough information to verify or refute the claim, you MUST return "unverifiable".
+4. Your reasoning MUST quote or reference specific search results by name/title.
+5. If you find yourself reasoning from knowledge not in the search results, STOP and return "unverifiable".
+
+Return ONLY valid JSON in this exact format (no markdown, no explanation):
 {
   "verdict": "verified" | "disputed" | "false" | "unverifiable",
-  "reasoning": "2-3 sentence explanation of your verdict based on the evidence",
+  "reasoning": "2-3 sentences explaining your verdict, citing specific sources from the search results by name",
   "confidence": "high" | "medium" | "low"
 }
 
 Verdict definitions:
-- verified: Multiple reliable sources confirm this claim is true
-- disputed: Sources conflict or the claim is partially true
-- false: Reliable sources directly contradict this claim
-- unverifiable: Insufficient evidence found to confirm or deny`,
+- verified: The search results explicitly confirm this claim is true
+- disputed: The search results give conflicting information about this claim
+- false: The search results explicitly contradict this claim
+- unverifiable: The search results do not contain enough information to determine truthfulness`,
         },
         {
           role: 'user',
-          content: `Claim: ${claim}
+          content: `CLAIM TO VERIFY: "${claim}"
 
-Web Search Answer: ${searchResults.answer || 'No answer available'}
+BELOW ARE THE WEB SEARCH RESULTS YOU MUST USE — DO NOT USE ANY OTHER KNOWLEDGE:
 
-Top Sources:
+Tavily AI Summary: ${searchResults.answer || 'No summary available.'}
+
+Sources found:
 ${(searchResults.results || [])
-  .map((r: any, i: number) => `${i + 1}. ${r.title}: ${r.snippet}`)
-  .join('\n')}
+  .map(
+    (r: any, i: number) =>
+      `[Source ${i + 1}] "${r.title}"\nURL: ${r.url}\nContent: ${r.snippet}`
+  )
+  .join('\n\n')}
 
-Return your verdict as JSON.`,
+Based ONLY on the sources above, what is your verdict? Return JSON.`,
         },
       ],
-      temperature: 0.1,
+      temperature: 0.0,
       max_tokens: 1024,
     })
 
     const content = completion.choices[0]?.message?.content || ''
+    console.log(`[Groq] Raw response: ${content.slice(0, 300)}`)
     const cleaned = content
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
       .trim()
     const parsed = JSON.parse(cleaned)
+    console.log(`[Groq] Verdict: ${parsed.verdict}`)
     return {
       verdict: parsed.verdict || 'unverifiable',
       reasoning: parsed.reasoning || 'Unable to determine.',
       sources: searchResults.results || [],
     }
-  } catch {
+  } catch (err) {
+    console.error(`[Groq] Error:`, err)
     return {
       verdict: 'unverifiable',
       reasoning: 'Web search unavailable.',

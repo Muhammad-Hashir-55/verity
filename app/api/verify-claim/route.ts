@@ -27,38 +27,50 @@ export async function POST(request: Request) {
       messages: [
         {
           role: 'system',
-          content: `You are a rigorous fact-checker. You will be given a claim and web search results. Analyze the evidence and return a structured verdict.
+          content: `CRITICAL INSTRUCTIONS — FOLLOW EXACTLY:
+
+You are a fact-checker. You are given a claim and web search results from a live search.
+
+STRICT RULES:
+1. You MUST base your verdict ONLY on the web search results provided below.
+2. You MUST NOT use any of your own training knowledge, pre-existing knowledge, or assumptions.
+3. If the search results do not contain enough information to verify or refute the claim, you MUST return "unverifiable".
+4. Your reasoning MUST quote or reference specific search results by name/title.
+5. If you find yourself reasoning from knowledge not in the search results, STOP and return "unverifiable".
 
 Return ONLY valid JSON in this exact format (no markdown):
 {
   "verdict": "verified" | "disputed" | "false" | "unverifiable",
-  "reasoning": "2-3 sentence explanation of your verdict based on the evidence",
+  "reasoning": "2-3 sentences explaining your verdict, citing specific sources from the search results by name",
   "confidence": "high" | "medium" | "low"
 }
 
 Verdict definitions:
-- verified: Multiple reliable sources confirm this claim is true
-- disputed: Sources conflict or the claim is partially true
-- false: Reliable sources directly contradict this claim
-- unverifiable: Insufficient evidence found to confirm or deny`,
+- verified: The search results explicitly confirm this claim is true
+- disputed: The search results give conflicting information about this claim
+- false: The search results explicitly contradict this claim
+- unverifiable: The search results do not contain enough information to determine truthfulness`,
         },
         {
           role: 'user',
-          content: `Claim: ${claim}
+          content: `CLAIM TO VERIFY: "${claim}"
 
-Web Search Answer: ${search_results.answer || 'No answer available'}
+BELOW ARE THE WEB SEARCH RESULTS YOU MUST USE — DO NOT USE ANY OTHER KNOWLEDGE:
 
-Top Sources:
+Tavily AI Summary: ${search_results.answer || 'No summary available.'}
+
+Sources found:
 ${(search_results.results || [])
   .map(
-    (r: any, i: number) => `${i + 1}. ${r.title}: ${r.snippet}`
+    (r: any, i: number) =>
+      `[Source ${i + 1}] "${r.title}"\nURL: ${r.url}\nContent: ${r.snippet}`
   )
-  .join('\n')}
+  .join('\n\n')}
 
-Return your verdict as JSON.`,
+Based ONLY on the sources above, what is your verdict? Return JSON.`,
         },
       ],
-      temperature: 0.1,
+      temperature: 0.0,
       max_tokens: 1024,
     })
 
