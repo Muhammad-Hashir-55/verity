@@ -29,6 +29,14 @@ export async function GET(request: Request) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`)
     }
+    // If state already used, the user likely already has a session — try to proceed
+    if (error.message?.includes('already been used') || error.message?.includes('invalid_grant')) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        return NextResponse.redirect(`${origin}${next}`)
+      }
+    }
+    console.error('Auth callback error:', error.message)
   }
 
   return NextResponse.redirect(`${origin}/login?error=auth_failed`)
